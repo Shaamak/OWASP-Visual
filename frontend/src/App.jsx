@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import axios from 'axios';
-import { Shield, Play, Loader2, Search } from 'lucide-react';
+import { Shield, Play, Loader2, Search, X } from 'lucide-react';
 import './index.css';
 
 function App() {
   const [url, setUrl] = useState('');
   const [scanning, setScanning] = useState(false);
   const [results, setResults] = useState([]);
+  const [activeVideo, setActiveVideo] = useState(null);
 
   const handleScan = async (e) => {
     e.preventDefault();
@@ -34,9 +35,9 @@ function App() {
   };
 
   const playEvidence = (evidence) => {
-    // In a full implementation, this would open a modal with a <video src={evidence.videoPath} />
-    // For MVP, we'll just log or show a placeholder alert since we don't have static serving yet
-    alert(`Visual Simulation recorded!\nVideo ID: ${evidence.videoId}\nStatus: ${evidence.status}\n\n(Video playback modal coming soon!)`);
+    // The videoPath from backend should be /media/videoId.webm
+    // The backend serves /media from backend/data/media
+    setActiveVideo(`http://localhost:5000${evidence.videoPath}`);
   };
 
   return (
@@ -93,6 +94,25 @@ function App() {
           </section>
         )}
       </main>
+
+      {/* Video Modal */}
+      {activeVideo && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <button className="modal-close" onClick={() => setActiveVideo(null)}>
+              <X size={24} />
+            </button>
+            <video 
+              src={activeVideo} 
+              autoPlay 
+              controls 
+              className="evidence-video"
+            >
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

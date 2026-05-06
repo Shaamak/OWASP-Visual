@@ -45,11 +45,16 @@ class VisualSimulator {
 
         const page = await context.newPage();
         
+        let finalVideoFilename = '';
         try {
             console.log(`[Simulator] Starting recording for scenario: ${videoId}`);
             // Execute the specific exploit scenario
             await scenarioFn(page);
             console.log(`[Simulator] Scenario execution completed.`);
+            
+            // Get the absolute path Playwright is writing to
+            const absolutePath = await page.video().path();
+            finalVideoFilename = path.basename(absolutePath);
         } catch (error) {
             console.error(`[Simulator] Error during scenario execution:`, error);
         } finally {
@@ -57,14 +62,10 @@ class VisualSimulator {
             await context.close();
         }
 
-        // Return the path or relative URL to the saved video
-        // Note: Playwright generates a random string for the video filename.
-        // For simplicity in MVP, we might need to grab the latest file or return the directory.
-        // We'll refine this later. For now, returning a mock path.
         return {
             videoId,
-            videoPath: `/media/${videoId}.webm`, // Mocked structure, actual file will be in data/media
-            status: 'recorded'
+            videoPath: finalVideoFilename ? `/media/${finalVideoFilename}` : null,
+            status: finalVideoFilename ? 'recorded' : 'failed'
         };
     }
 }
