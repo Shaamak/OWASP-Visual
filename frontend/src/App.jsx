@@ -214,7 +214,7 @@ export default function App() {
           <a className="logo" href="/">
             <div className="logo-icon">🛡️</div>
             <div>
-              <div className="logo-text">Aevus</div>
+              <div className="logo-text">VisiVault</div>
               <div className="logo-sub">OWASP Visual Scanner</div>
             </div>
           </a>

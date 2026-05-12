@@ -40,7 +40,7 @@ const demonstrateXSS = (url, payload) => {
   </div>
   <script>
     // VULNERABLE: reflects raw user input into the DOM
-    const params = new URLSearchParams('q=' + encodeURIComponent("<img src=x onerror=alert('XSS by Aevus Scanner!')>"));
+    const params = new URLSearchParams('q=' + encodeURIComponent("<img src=x onerror=alert('XSS by VisiVault Scanner!')>"));
     document.getElementById('reflected-query').innerHTML = decodeURIComponent(params.get('q'));
   </script>
 </body>
