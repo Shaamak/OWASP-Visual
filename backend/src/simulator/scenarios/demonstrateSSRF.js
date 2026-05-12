@@ -30,8 +30,8 @@ const demonstrateSSRF = () => {
     <span class="comment"># Server fetches it internally and returns cloud secrets</span><br>
     <span class="response">HTTP/1.1 200 OK</span><br>
     <span class="danger">
-      AccessKeyId: ASIAIOSFODNN7EXAMPLE<br>
-      SecretAccessKey: wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY<br>
+      AccessKeyId: AKIA_MOCK_ACCESS_KEY_ID_EXAMPLE<br>
+      SecretAccessKey: wJalrXUtnFEMI/K7MDENG/bPxRfiCY_MOCK_SECRET<br>
       Token: AQoXnyc4lcK4W9EXAMPLE...<br>
       Expiration: 2026-12-31T23:59:59Z<br><br>
       ☠️ Full AWS account now compromised via SSRF!

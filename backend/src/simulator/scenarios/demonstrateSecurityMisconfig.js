@@ -52,8 +52,8 @@ const demonstrateSecurityMisconfig = () => {
     <div class="env-row"><span class="env-key">DB_HOST</span><span class="env-val danger">db-prod.internal</span></div>
     <div class="env-row"><span class="env-key">DB_PASSWORD</span><span class="env-val danger">P@ssw0rd</span></div>
     <div class="env-row"><span class="env-key">JWT_SECRET</span><span class="env-val danger">mysupersecretkey123</span></div>
-    <div class="env-row"><span class="env-key">AWS_ACCESS_KEY_ID</span><span class="env-val danger">AKIAIOSFODNN7EXAMPLE</span></div>
-    <div class="env-row"><span class="env-key">AWS_SECRET_ACCESS_KEY</span><span class="env-val danger">wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY</span></div>
+    <div class="env-row"><span class="env-key">AWS_ACCESS_KEY_ID</span><span class="env-val danger">AKIA_MOCK_ACCESS_KEY_ID</span></div>
+    <div class="env-row"><span class="env-key">AWS_SECRET_ACCESS_KEY</span><span class="env-val danger">wJalrXUtnFEMI/K7MDENG/bPxRfiCY_MOCK_SECRET</span></div>
     <div class="env-row"><span class="env-key">PORT</span><span class="env-val">3000</span></div>
   </div>
 
