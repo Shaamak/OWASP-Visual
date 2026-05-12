@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const ScannerEngine = require('../scanner/engine');
 
 // In-memory scan store: scanId -> { status, findings, startedAt }
@@ -27,7 +27,7 @@ router.post('/scan', async (req, res) => {
         return res.status(400).json({ error: 'targetUrl is required' });
     }
 
-    const scanId = uuidv4();
+    const scanId = randomUUID();
     const io = req.app.locals.io;
 
     // Seed the store immediately
