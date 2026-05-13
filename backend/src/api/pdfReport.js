@@ -1,470 +1,383 @@
 const PDFDocument = require('pdfkit');
 
 // ── Color palette ────────────────────────────────────────────────────────────
-const COLORS = {
-    bg:           '#060912',
-    panel:        '#161b22',
-    border:       '#30363d',
-    text:         '#e6edf3',
-    muted:        '#7d8590',
-    accent:       '#4493f8',
-    purple:       '#a371f7',
-    critical:     '#f85149',
-    high:         '#e3b341',
-    medium:       '#4493f8',
-    low:          '#3fb950',
-    white:        '#ffffff',
-    green:        '#3fb950',
+const C = {
+    bg:       '#060912',
+    panel:    '#0d1117',
+    border:   '#30363d',
+    text:     '#e6edf3',
+    muted:    '#7d8590',
+    dim:      '#484f58',
+    accent:   '#4493f8',
+    purple:   '#a371f7',
+    green:    '#3fb950',
+    white:    '#ffffff',
+    critical: '#f85149',
+    high:     '#e3b341',
+    medium:   '#4493f8',
+    low:      '#3fb950',
 };
 
-// Hex → r,g,b for PDFKit fillColor calls
-function hex(h) { return h; }
+const SEV_COLOR = { Critical: C.critical, High: C.high, Medium: C.medium, Low: C.low };
 
-const SEV_COLOR = {
-    Critical: COLORS.critical,
-    High:     COLORS.high,
-    Medium:   COLORS.medium,
-    Low:      COLORS.low,
-};
+const PAGE_W    = 612;
+const PAGE_H    = 792;
+const MARGIN    = 50;
+const CONTENT_W = PAGE_W - MARGIN * 2;
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Low-level drawing helpers ────────────────────────────────────────────────
 
-/** Draw a filled rectangle */
-function fillRect(doc, x, y, w, h, color) {
-    doc.save().rect(x, y, w, h).fill(color).restore();
+function rect(doc, x, y, w, h, fill, opacity = 1) {
+    doc.save().fillOpacity(opacity).rect(x, y, w, h).fill(fill).restore();
 }
 
-/** Draw a rounded rectangle outline */
-function strokeRoundedRect(doc, x, y, w, h, r, color, lineWidth = 0.5) {
-    doc.save().roundedRect(x, y, w, h, r).strokeColor(color).lineWidth(lineWidth).stroke().restore();
+function roundRect(doc, x, y, w, h, r, fill, opacity = 1) {
+    doc.save().fillOpacity(opacity).roundedRect(x, y, w, h, r).fill(fill).restore();
 }
 
-/** Wrap text manually and return number of lines used */
-function textLines(doc, text, x, y, opts) {
-    doc.text(text, x, y, opts);
+function strokeRRect(doc, x, y, w, h, r, color, lw = 0.6) {
+    doc.save().roundedRect(x, y, w, h, r).strokeColor(color).lineWidth(lw).stroke().restore();
+}
+
+function hRule(doc, y, color = C.border, opacity = 1) {
+    doc.save().fillOpacity(opacity).moveTo(MARGIN, y).lineTo(MARGIN + CONTENT_W, y)
+       .strokeColor(color).lineWidth(0.5).stroke().restore();
+}
+
+function text(doc, str, x, y, opts = {}) {
+    const { color = C.text, font = 'Helvetica', size = 9, width, align, lineGap } = opts;
+    const args = { width, align, lineGap };
+    // strip undefined keys
+    Object.keys(args).forEach(k => args[k] === undefined && delete args[k]);
+    doc.save().fillColor(color).font(font).fontSize(size).text(str, x, y, args).restore();
     return doc.y;
 }
 
-/** Draw a horizontal rule */
-function hRule(doc, y, color = COLORS.border) {
-    doc.save().moveTo(50, y).lineTo(562, y).strokeColor(color).lineWidth(0.5).stroke().restore();
+// Severity badge (text-only, no emoji)
+function sevBadge(doc, x, y, severity) {
+    const color = SEV_COLOR[severity] || C.medium;
+    const w = 58; const h = 14; const r = 3;
+    roundRect(doc, x, y, w, h, r, color, 0.15);
+    strokeRRect(doc, x, y, w, h, r, color, 0.7);
+    text(doc, severity.toUpperCase(), x, y + 3.5, { color, font: 'Helvetica-Bold', size: 7, width: w, align: 'center' });
 }
 
-/** Severity pill */
-function severityPill(doc, x, y, severity) {
-    const color = SEV_COLOR[severity] || COLORS.medium;
-    const w = 60; const h = 14; const r = 4;
-    doc.save()
-       .roundedRect(x, y, w, h, r)
-       .fill(color + '33')  // 20% opacity fill
-       .restore();
-    doc.save()
-       .roundedRect(x, y, w, h, r)
-       .strokeColor(color)
-       .lineWidth(0.7)
-       .stroke()
-       .restore();
-    doc.save()
-       .fillColor(color)
-       .font('Helvetica-Bold')
-       .fontSize(7)
-       .text(severity.toUpperCase(), x, y + 3.5, { width: w, align: 'center' })
-       .restore();
+function owaspBadge(doc, x, y, label) {
+    const w = 70; const h = 14; const r = 3;
+    roundRect(doc, x, y, w, h, r, C.purple, 0.1);
+    strokeRRect(doc, x, y, w, h, r, C.purple, 0.5);
+    text(doc, label, x, y + 3.5, { color: C.purple, font: 'Helvetica-Bold', size: 7, width: w, align: 'center' });
 }
 
-// ── Page helpers ──────────────────────────────────────────────────────────────
-const PAGE_W = 612;
-const PAGE_H = 792;
-const MARGIN = 50;
-const CONTENT_W = PAGE_W - MARGIN * 2;
-
-function addPageHeader(doc, scanId, pageNum) {
-    // Top bar
-    fillRect(doc, 0, 0, PAGE_W, 36, '#0d1117');
-    doc.save()
-       .fillColor(COLORS.accent)
-       .font('Helvetica-Bold')
-       .fontSize(8)
-       .text('VisiVault', MARGIN, 13)
-       .restore();
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(7)
-       .text(`Scan ID: ${scanId}`, 0, 14, { width: PAGE_W - MARGIN, align: 'right' })
-       .restore();
-    hRule(doc, 36, '#21262d');
+function smallLabel(doc, str, x, y, color = C.muted) {
+    text(doc, str.toUpperCase(), x, y, { color, font: 'Helvetica-Bold', size: 7.5, letterSpacing: 0.06 });
 }
 
-function addPageFooter(doc, pageNum, totalPages) {
-    hRule(doc, PAGE_H - 36, '#21262d');
-    fillRect(doc, 0, PAGE_H - 36, PAGE_W, 36, '#0d1117');
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(7)
-       .text('CONFIDENTIAL — VisiVault Security Report', MARGIN, PAGE_H - 20)
-       .restore();
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(7)
-       .text(`Page ${pageNum}`, 0, PAGE_H - 20, { width: PAGE_W - MARGIN, align: 'right' })
-       .restore();
+// ── Page chrome ──────────────────────────────────────────────────────────────
+
+function pageHeader(doc, scanId) {
+    rect(doc, 0, 0, PAGE_W, 36, C.panel);
+    text(doc, 'VisiVault', MARGIN, 13, { color: C.accent, font: 'Helvetica-Bold', size: 9 });
+    text(doc, `Scan: ${scanId.slice(0, 18)}...`, MARGIN, 13, {
+        color: C.muted, size: 7.5, width: CONTENT_W, align: 'right',
+    });
+    doc.save().moveTo(0, 36).lineTo(PAGE_W, 36).strokeColor(C.border).lineWidth(0.4).stroke().restore();
 }
 
-// ── Cover Page ─────────────────────────────────────────────────────────────
-function buildCoverPage(doc, scan) {
+function pageFooter(doc, pageNum) {
+    doc.save().moveTo(0, PAGE_H - 36).lineTo(PAGE_W, PAGE_H - 36)
+       .strokeColor(C.border).lineWidth(0.4).stroke().restore();
+    rect(doc, 0, PAGE_H - 36, PAGE_W, 36, C.panel);
+    text(doc, 'CONFIDENTIAL -- VisiVault Security Assessment Report', MARGIN, PAGE_H - 22, { color: C.dim, size: 7.5 });
+    text(doc, `Page ${pageNum}`, MARGIN, PAGE_H - 22, { color: C.dim, size: 7.5, width: CONTENT_W, align: 'right' });
+}
+
+// ── Cover Page ───────────────────────────────────────────────────────────────
+
+function buildCover(doc, scan) {
+    rect(doc, 0, 0, PAGE_W, PAGE_H, C.bg);
+
+    // Left accent strip
+    rect(doc, 0, 0, 5, PAGE_H, C.accent);
+
+    // Decorative top-right corner block
+    roundRect(doc, PAGE_W - 180, 60, 150, 150, 12, C.accent, 0.04);
+    strokeRRect(doc, PAGE_W - 180, 60, 150, 150, 12, C.accent, 0.15);
+
+    // Title block
+    text(doc, 'SECURITY', MARGIN, 100, { color: C.white, font: 'Helvetica-Bold', size: 40 });
+    text(doc, 'ASSESSMENT', MARGIN, 148, { color: C.white, font: 'Helvetica-Bold', size: 40 });
+    text(doc, 'REPORT', MARGIN, 196, { color: C.accent, font: 'Helvetica-Bold', size: 40 });
+
+    text(doc, 'OWASP Top 10 -- Visual Exploit Simulation', MARGIN, 252, {
+        color: C.muted, size: 11,
+    });
+
+    // Rule
+    doc.save().moveTo(MARGIN, 278).lineTo(MARGIN + CONTENT_W, 278)
+       .strokeColor(C.accent).lineWidth(1).stroke().restore();
+
+    // Target info
+    smallLabel(doc, 'Target Application', MARGIN, 295);
+    text(doc, scan.targetUrl, MARGIN, 312, { color: C.white, font: 'Helvetica-Bold', size: 12, width: CONTENT_W });
+
+    // Meta grid
     const now = new Date(scan.startedAt);
-
-    // Dark full-page background
-    fillRect(doc, 0, 0, PAGE_W, PAGE_H, '#060912');
-
-    // Accent gradient strip on the left
-    fillRect(doc, 0, 0, 6, PAGE_H, COLORS.accent);
-
-    // Shield emoji area (big, centered-ish)
-    doc.save()
-       .fillColor(COLORS.accent)
-       .font('Helvetica-Bold')
-       .fontSize(48)
-       .text('🛡', MARGIN + 10, 110)
-       .restore();
-
-    doc.save()
-       .fillColor(COLORS.white)
-       .font('Helvetica-Bold')
-       .fontSize(30)
-       .text('Security Assessment', MARGIN, 175)
-       .restore();
-
-    doc.save()
-       .fillColor(COLORS.white)
-       .font('Helvetica-Bold')
-       .fontSize(30)
-       .text('Report', MARGIN, 212)
-       .restore();
-
-    doc.save()
-       .fillColor(COLORS.accent)
-       .font('Helvetica')
-       .fontSize(13)
-       .text('OWASP Top 10 Visual Exploit Simulation', MARGIN, 255)
-       .restore();
-
-    // Divider
-    hRule(doc, 285, COLORS.accent);
-
-    // Target info block
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(9)
-       .text('TARGET APPLICATION', MARGIN, 302)
-       .restore();
-
-    doc.save()
-       .fillColor(COLORS.white)
-       .font('Helvetica-Bold')
-       .fontSize(12)
-       .text(scan.targetUrl, MARGIN, 318, { width: CONTENT_W })
-       .restore();
-
-    // Info grid
-    const infoY = 365;
-    const col = CONTENT_W / 3;
-    const infos = [
-        ['Scan Date',   now.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })],
-        ['Scan Time',   now.toLocaleTimeString([], { hour:'2-digit', minute:'2-digit' })],
-        ['Scan Status', scan.status.toUpperCase()],
+    const cols = [
+        ['Scan Date', now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })],
+        ['Scan Time', now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })],
+        ['Status',    scan.status.toUpperCase()],
     ];
-    infos.forEach(([label, value], i) => {
-        const x = MARGIN + i * col;
-        doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(8).text(label, x, infoY).restore();
-        doc.save().fillColor(COLORS.white).font('Helvetica-Bold').fontSize(10).text(value, x, infoY + 14).restore();
+    const colW = CONTENT_W / 3;
+    cols.forEach(([label, val], i) => {
+        const x = MARGIN + i * colW;
+        smallLabel(doc, label, x, 360);
+        text(doc, val, x, 376, { color: C.white, font: 'Helvetica-Bold', size: 11 });
     });
 
-    // Finding counts
-    const findings = scan.findings || [];
-    const critCount = findings.filter(f => f.severity === 'Critical').length;
-    const highCount = findings.filter(f => f.severity === 'High').length;
-    const medCount  = findings.filter(f => f.severity === 'Medium').length;
-    const lowCount  = findings.filter(f => f.severity === 'Low').length;
+    // Summary box
+    const findings  = scan.findings || [];
+    const critical  = findings.filter(f => f.severity === 'Critical').length;
+    const high      = findings.filter(f => f.severity === 'High').length;
+    const medium    = findings.filter(f => f.severity === 'Medium').length;
+    const low       = findings.filter(f => f.severity === 'Low').length;
 
-    const statsY = 430;
-    fillRect(doc, MARGIN, statsY, CONTENT_W, 90, '#0d1117');
-    strokeRoundedRect(doc, MARGIN, statsY, CONTENT_W, 90, 6, COLORS.border);
+    const boxY = 420;
+    roundRect(doc, MARGIN, boxY, CONTENT_W, 100, 8, C.panel);
+    strokeRRect(doc, MARGIN, boxY, CONTENT_W, 100, 8, C.border);
+    smallLabel(doc, 'Vulnerability Summary', MARGIN + 16, boxY + 14);
 
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(8)
-       .text('VULNERABILITY SUMMARY', MARGIN + 16, statsY + 14)
-       .restore();
-
-    const statItems = [
-        ['Total',    findings.length, COLORS.accent],
-        ['Critical', critCount,       COLORS.critical],
-        ['High',     highCount,       COLORS.high],
-        ['Medium',   medCount,        COLORS.medium],
-        ['Low',      lowCount,        COLORS.low],
+    const stats = [
+        ['Total',    findings.length, C.accent],
+        ['Critical', critical,        C.critical],
+        ['High',     high,            C.high],
+        ['Medium',   medium,          C.medium],
+        ['Low',      low,             C.low],
     ];
-    const statColW = CONTENT_W / statItems.length;
-    statItems.forEach(([label, count, color], i) => {
-        const x = MARGIN + i * statColW + 16;
-        doc.save().fillColor(color).font('Helvetica-Bold').fontSize(22).text(String(count), x, statsY + 36).restore();
-        doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(8).text(label, x, statsY + 64).restore();
+    const sW = CONTENT_W / stats.length;
+    stats.forEach(([label, count, color], i) => {
+        const x = MARGIN + i * sW + 16;
+        text(doc, String(count), x, boxY + 38, { color, font: 'Helvetica-Bold', size: 26 });
+        smallLabel(doc, label, x, boxY + 72, C.muted);
     });
 
-    // Bottom note
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(8)
-       .text(
-           'This report was generated automatically by VisiVault. Each vulnerability includes a recorded video demonstrating the exploit. Treat this document as CONFIDENTIAL.',
-           MARGIN, PAGE_H - 100,
-           { width: CONTENT_W, align: 'center' }
-       )
-       .restore();
+    // Footer note
+    text(doc,
+        'This report was automatically generated by VisiVault. ' +
+        'Each finding includes a recorded video demonstrating the exploit. ' +
+        'Treat this document as CONFIDENTIAL.',
+        MARGIN, PAGE_H - 80,
+        { color: C.dim, size: 8, width: CONTENT_W, align: 'center' }
+    );
 
-    addPageFooter(doc, 1, '?');
+    pageFooter(doc, 1);
 }
 
-// ── Executive Summary Page ─────────────────────────────────────────────────
-function buildSummaryPage(doc, scan) {
+// ── Executive Summary Page ────────────────────────────────────────────────────
+
+function buildSummary(doc, scan) {
     doc.addPage();
-    fillRect(doc, 0, 0, PAGE_W, PAGE_H, '#060912');
-    addPageHeader(doc, scan.scanId, 2);
+    rect(doc, 0, 0, PAGE_W, PAGE_H, C.bg);
+    pageHeader(doc, scan.scanId);
 
     let y = 56;
 
-    doc.save()
-       .fillColor(COLORS.white)
-       .font('Helvetica-Bold')
-       .fontSize(18)
-       .text('Executive Summary', MARGIN, y)
-       .restore();
-    y += 32;
+    text(doc, 'Executive Summary', MARGIN, y, { color: C.white, font: 'Helvetica-Bold', size: 20 });
+    y += 36;
 
     // Risk score
-    const findings = scan.findings || [];
-    const critCount = findings.filter(f => f.severity === 'Critical').length;
-    const highCount = findings.filter(f => f.severity === 'High').length;
-    const riskScore = Math.min(10, (critCount * 2.5 + highCount * 1.5)).toFixed(1);
+    const findings  = scan.findings || [];
+    const critical  = findings.filter(f => f.severity === 'Critical').length;
+    const high      = findings.filter(f => f.severity === 'High').length;
+    const riskScore = Math.min(10, critical * 2.5 + high * 1.5).toFixed(1);
+    const riskColor = riskScore >= 8 ? C.critical : riskScore >= 5 ? C.high : C.medium;
     const riskLabel = riskScore >= 8 ? 'CRITICAL RISK' : riskScore >= 5 ? 'HIGH RISK' : 'MEDIUM RISK';
-    const riskColor = riskScore >= 8 ? COLORS.critical : riskScore >= 5 ? COLORS.high : COLORS.medium;
 
-    fillRect(doc, MARGIN, y, CONTENT_W, 56, '#0d1117');
-    strokeRoundedRect(doc, MARGIN, y, CONTENT_W, 56, 6, riskColor, 1);
-    doc.save().fillColor(riskColor).font('Helvetica-Bold').fontSize(28).text(riskScore, MARGIN + 20, y + 10).restore();
-    doc.save().fillColor(riskColor).font('Helvetica-Bold').fontSize(10).text('/ 10', MARGIN + 55, y + 20).restore();
-    doc.save().fillColor(riskColor).font('Helvetica-Bold').fontSize(10).text(riskLabel, MARGIN + 80, y + 10).restore();
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(8)
-       .text(`Based on ${findings.length} vulnerabilities found: ${critCount} Critical, ${highCount} High`, MARGIN + 80, y + 28)
-       .restore();
+    roundRect(doc, MARGIN, y, CONTENT_W, 56, 6, C.panel);
+    strokeRRect(doc, MARGIN, y, CONTENT_W, 56, 6, riskColor, 1.2);
+    text(doc, riskScore, MARGIN + 20, y + 8, { color: riskColor, font: 'Helvetica-Bold', size: 28 });
+    text(doc, '/ 10', MARGIN + 64, y + 20, { color: riskColor, size: 10 });
+    text(doc, riskLabel, MARGIN + 94, y + 8, { color: riskColor, font: 'Helvetica-Bold', size: 11 });
+    text(doc,
+        `Based on ${findings.length} vulnerabilities: ${critical} Critical, ${high} High`,
+        MARGIN + 94, y + 28, { color: C.muted, size: 8.5 }
+    );
     y += 72;
 
-    // Scope
-    doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(8).text('SCAN SCOPE', MARGIN, y).restore();
+    // Scope paragraph
+    smallLabel(doc, 'Scope', MARGIN, y);
     y += 14;
-    doc.save().fillColor(COLORS.text).font('Helvetica').fontSize(10)
-       .text(`The automated VisiVault scanner performed an OWASP Top 10 assessment against ${scan.targetUrl}. The scanner tested for all ten vulnerability categories defined in the OWASP Top 10 (2021) standard, injected attack payloads, and recorded video evidence for each confirmed finding.`, MARGIN, y, { width: CONTENT_W })
-       .restore();
-    y += 58;
-    hRule(doc, y, COLORS.border);
+    text(doc,
+        `The VisiVault automated scanner performed a full OWASP Top 10 (2021) assessment against ${scan.targetUrl}. ` +
+        `Payloads were injected across all discovered input vectors. Each confirmed vulnerability was visually ` +
+        `recorded using a headless browser session.`,
+        MARGIN, y, { color: C.text, size: 9.5, width: CONTENT_W, lineGap: 2 }
+    );
+    y = doc.y + 16;
+    hRule(doc, y);
     y += 16;
 
     // Findings table
-    doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(8).text('FINDINGS OVERVIEW', MARGIN, y).restore();
+    smallLabel(doc, 'Findings Overview', MARGIN, y);
     y += 14;
 
-    // Table header
-    fillRect(doc, MARGIN, y, CONTENT_W, 22, '#0d1117');
-    strokeRoundedRect(doc, MARGIN, y, CONTENT_W, 22, 0, COLORS.border);
-    const cols = [0, 0.36, 0.55, 0.72, 1.0];
-    const headers = ['Vulnerability', 'OWASP ID', 'Severity', 'Evidence'];
-    headers.forEach((h, i) => {
-        const x = MARGIN + cols[i] * CONTENT_W + 8;
-        doc.save().fillColor(COLORS.muted).font('Helvetica-Bold').fontSize(7.5).text(h, x, y + 7).restore();
+    // Table header row
+    rect(doc, MARGIN, y, CONTENT_W, 22, '#0d1117');
+    strokeRRect(doc, MARGIN, y, CONTENT_W, 22, 0, C.border, 0.5);
+
+    const cols = [
+        { label: 'Vulnerability',   x: MARGIN + 8,            w: 170 },
+        { label: 'OWASP ID',        x: MARGIN + 8 + 178,      w: 80  },
+        { label: 'Severity',        x: MARGIN + 8 + 260,      w: 70  },
+        { label: 'CWE',             x: MARGIN + 8 + 332,      w: 60  },
+        { label: 'Evidence',        x: MARGIN + 8 + 394,      w: 60  },
+    ];
+
+    cols.forEach(c => {
+        text(doc, c.label, c.x, y + 7, { color: C.muted, font: 'Helvetica-Bold', size: 7.5 });
     });
     y += 22;
 
     findings.forEach((f, idx) => {
-        const rowH = 22;
+        const rowH  = 22;
         const rowBg = idx % 2 === 0 ? '#0d1117' : '#111827';
-        fillRect(doc, MARGIN, y, CONTENT_W, rowH, rowBg);
-        strokeRoundedRect(doc, MARGIN, y, CONTENT_W, rowH, 0, '#1f2937', 0.3);
+        rect(doc, MARGIN, y, CONTENT_W, rowH, rowBg);
 
-        const colData = [
-            { text: f.vulnerability.length > 32 ? f.vulnerability.substring(0, 30) + '…' : f.vulnerability, color: COLORS.text },
-            { text: f.owaspId, color: COLORS.purple },
-            { text: '', color: '' }, // pill rendered separately
-            { text: f.evidence?.videoPath ? '📹 Recorded' : '—', color: f.evidence?.videoPath ? COLORS.green : COLORS.muted },
+        const name = f.vulnerability.length > 28 ? f.vulnerability.slice(0, 26) + '...' : f.vulnerability;
+        const row = [
+            { val: name,                         color: C.text   },
+            { val: f.owaspId,                    color: C.purple },
+            { val: '',                           color: ''       }, // pill
+            { val: f.cwe,                        color: C.muted  },
+            { val: f.evidence?.videoPath ? 'Recorded' : '--', color: f.evidence?.videoPath ? C.green : C.dim },
         ];
-
-        colData.forEach((c, i) => {
-            if (i === 2) { severityPill(doc, MARGIN + cols[i] * CONTENT_W + 8, y + 4, f.severity); return; }
-            const x = MARGIN + cols[i] * CONTENT_W + 8;
-            doc.save().fillColor(c.color).font('Helvetica').fontSize(8).text(c.text, x, y + 7).restore();
+        row.forEach((cell, i) => {
+            if (i === 2) { sevBadge(doc, cols[i].x, y + 4, f.severity); return; }
+            text(doc, cell.val, cols[i].x, y + 7, { color: cell.color, size: 8 });
         });
         y += rowH;
     });
 
-    y += 20;
-    hRule(doc, y, COLORS.border);
+    y += 18;
+    hRule(doc, y);
     y += 16;
 
-    // Key recommendations
-    doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(8).text('KEY RECOMMENDATIONS', MARGIN, y).restore();
-    y += 14;
-
-    const topFindings = findings.filter(f => f.severity === 'Critical' || f.severity === 'High').slice(0, 3);
-    topFindings.forEach((f, i) => {
-        doc.save().fillColor(COLORS.critical).font('Helvetica-Bold').fontSize(8.5).text(`${i + 1}.  ${f.vulnerability}`, MARGIN, y).restore();
+    // Top recommendations
+    if (y < PAGE_H - 120) {
+        smallLabel(doc, 'Priority Recommendations', MARGIN, y);
         y += 14;
-        doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(8)
-           .text(f.remediation, MARGIN + 14, y, { width: CONTENT_W - 14 })
-           .restore();
-        y += doc.currentLineHeight() * 2.2 + 8;
-    });
-
-    addPageFooter(doc, 2, '?');
-}
-
-// ── Per-Finding Pages ──────────────────────────────────────────────────────
-function buildFindingPage(doc, finding, pageNum, scan) {
-    doc.addPage();
-    fillRect(doc, 0, 0, PAGE_W, PAGE_H, '#060912');
-    addPageHeader(doc, scan.scanId, pageNum);
-
-    const sevColor = SEV_COLOR[finding.severity] || COLORS.medium;
-
-    // Left accent bar tinted by severity
-    fillRect(doc, 0, 0, 4, PAGE_H, sevColor);
-
-    let y = 56;
-
-    // Severity pill + OWASP badge
-    severityPill(doc, MARGIN, y, finding.severity);
-
-    doc.save()
-       .fillColor(COLORS.purple)
-       .font('Helvetica-Bold')
-       .fontSize(7)
-       .text(finding.owaspId, MARGIN + 68, y + 3)
-       .restore();
-
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(7)
-       .text(finding.cwe, MARGIN + 68 + 55, y + 3)
-       .restore();
-
-    y += 22;
-
-    // Title
-    doc.save()
-       .fillColor(COLORS.white)
-       .font('Helvetica-Bold')
-       .fontSize(16)
-       .text(finding.vulnerability, MARGIN, y, { width: CONTENT_W })
-       .restore();
-    y += 28;
-
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(9)
-       .text(finding.owaspName, MARGIN, y)
-       .restore();
-    y += 22;
-
-    hRule(doc, y, COLORS.border);
-    y += 16;
-
-    // Description section
-    doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(8).text('DESCRIPTION', MARGIN, y).restore();
-    y += 14;
-    doc.save()
-       .fillColor(COLORS.text)
-       .font('Helvetica')
-       .fontSize(9.5)
-       .text(finding.description, MARGIN, y, { width: CONTENT_W, lineGap: 2 })
-       .restore();
-    y = doc.y + 20;
-
-    // Affected URL
-    doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(8).text('AFFECTED URL', MARGIN, y).restore();
-    y += 14;
-    fillRect(doc, MARGIN, y, CONTENT_W, 26, '#0d1117');
-    strokeRoundedRect(doc, MARGIN, y, CONTENT_W, 26, 4, COLORS.border);
-    doc.save()
-       .fillColor(COLORS.accent)
-       .font('Helvetica')
-       .fontSize(9)
-       .text(finding.url, MARGIN + 10, y + 8, { width: CONTENT_W - 20 })
-       .restore();
-    y += 40;
-
-    hRule(doc, y, COLORS.border);
-    y += 16;
-
-    // Remediation
-    doc.save().fillColor(COLORS.green).font('Helvetica-Bold').fontSize(8).text('REMEDIATION', MARGIN, y).restore();
-    y += 14;
-    fillRect(doc, MARGIN, y, 3, 999, COLORS.green); // green left accent — clipped by content
-    doc.save()
-       .fillColor(COLORS.text)
-       .font('Helvetica')
-       .fontSize(9.5)
-       .text(finding.remediation, MARGIN + 14, y, { width: CONTENT_W - 14, lineGap: 2 })
-       .restore();
-    y = doc.y + 20;
-
-    hRule(doc, y, COLORS.border);
-    y += 16;
-
-    // Evidence
-    doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(8).text('VISUAL EVIDENCE', MARGIN, y).restore();
-    y += 14;
-
-    if (finding.evidence?.videoPath) {
-        fillRect(doc, MARGIN, y, CONTENT_W, 52, '#0d1117');
-        strokeRoundedRect(doc, MARGIN, y, CONTENT_W, 52, 6, COLORS.green, 0.8);
-        doc.save().fillColor(COLORS.green).font('Helvetica-Bold').fontSize(10).text('📹  Exploit Recorded', MARGIN + 16, y + 10).restore();
-        doc.save()
-           .fillColor(COLORS.muted)
-           .font('Helvetica')
-           .fontSize(8)
-           .text(`Video file: ${finding.evidence.videoPath}`, MARGIN + 16, y + 28)
-           .restore();
-    } else {
-        fillRect(doc, MARGIN, y, CONTENT_W, 36, '#0d1117');
-        strokeRoundedRect(doc, MARGIN, y, CONTENT_W, 36, 6, COLORS.border);
-        doc.save().fillColor(COLORS.muted).font('Helvetica').fontSize(9).text('Video evidence not available for this finding.', MARGIN + 16, y + 12).restore();
+        const topFindings = findings.filter(f => f.severity === 'Critical' || f.severity === 'High').slice(0, 3);
+        topFindings.forEach((f, i) => {
+            if (y > PAGE_H - 80) return;
+            text(doc, `${i + 1}.  ${f.vulnerability}`, MARGIN, y, { color: C.text, font: 'Helvetica-Bold', size: 9 });
+            y += 14;
+            const endY = text(doc, f.remediation, MARGIN + 14, y, {
+                color: C.muted, size: 8.5, width: CONTENT_W - 14, lineGap: 1.5,
+            });
+            y = endY + 12;
+        });
     }
 
-    // Timestamp
-    y += 70;
-    doc.save()
-       .fillColor(COLORS.muted)
-       .font('Helvetica')
-       .fontSize(7.5)
-       .text(`Detected at: ${new Date(finding.timestamp).toLocaleString()}  ·  Scan ID: ${scan.scanId}`, MARGIN, y)
-       .restore();
-
-    addPageFooter(doc, pageNum, '?');
+    pageFooter(doc, 2);
 }
 
-// ── Main Generator ────────────────────────────────────────────────────────
+// ── Per-Finding Page ─────────────────────────────────────────────────────────
+
+function buildFinding(doc, finding, pageNum, scan) {
+    doc.addPage();
+    rect(doc, 0, 0, PAGE_W, PAGE_H, C.bg);
+    pageHeader(doc, scan.scanId);
+
+    const sevColor = SEV_COLOR[finding.severity] || C.medium;
+
+    // Severity accent bar on left
+    rect(doc, 0, 0, 4, PAGE_H, sevColor);
+
+    let y = 54;
+
+    // Badges row
+    sevBadge(doc, MARGIN, y, finding.severity);
+    owaspBadge(doc, MARGIN + 66, y, finding.owaspId);
+    text(doc, finding.cwe, MARGIN + 144, y + 3.5, { color: C.dim, size: 7.5 });
+    y += 24;
+
+    // Vulnerability title
+    text(doc, finding.vulnerability, MARGIN, y, { color: C.white, font: 'Helvetica-Bold', size: 16, width: CONTENT_W });
+    y += 26;
+    text(doc, finding.owaspName, MARGIN, y, { color: C.muted, size: 9 });
+    y += 20;
+
+    hRule(doc, y);
+    y += 14;
+
+    // Description
+    smallLabel(doc, 'Description', MARGIN, y);
+    y += 13;
+    const descEndY = text(doc, finding.description, MARGIN, y, {
+        color: C.text, size: 9.5, width: CONTENT_W, lineGap: 2,
+    });
+    y = descEndY + 16;
+
+    // Affected URL
+    smallLabel(doc, 'Affected URL', MARGIN, y);
+    y += 13;
+    roundRect(doc, MARGIN, y, CONTENT_W, 26, 4, C.panel);
+    strokeRRect(doc, MARGIN, y, CONTENT_W, 26, 4, C.border);
+    text(doc, finding.url, MARGIN + 10, y + 8, { color: C.accent, size: 9, width: CONTENT_W - 20 });
+    y += 40;
+
+    hRule(doc, y);
+    y += 14;
+
+    // Remediation
+    smallLabel(doc, 'Remediation', MARGIN, y, C.green);
+    y += 13;
+    // Green left bar
+    rect(doc, MARGIN, y, 3, 200, C.green, 0.6); // over-tall, clipped visually
+    const remEndY = text(doc, finding.remediation, MARGIN + 12, y, {
+        color: C.text, size: 9.5, width: CONTENT_W - 12, lineGap: 2,
+    });
+    y = remEndY + 18;
+
+    hRule(doc, y);
+    y += 14;
+
+    // Evidence reference (compact — no blank space)
+    smallLabel(doc, 'Evidence', MARGIN, y);
+    y += 13;
+
+    if (finding.evidence?.videoPath) {
+        roundRect(doc, MARGIN, y, CONTENT_W, 32, 4, C.panel);
+        strokeRRect(doc, MARGIN, y, CONTENT_W, 32, 4, C.green, 0.7);
+        text(doc, 'Video evidence recorded', MARGIN + 12, y + 7, {
+            color: C.green, font: 'Helvetica-Bold', size: 9,
+        });
+        text(doc, `File: ${finding.evidence.videoPath}`, MARGIN + 12, y + 20, {
+            color: C.muted, size: 7.5, width: CONTENT_W - 24,
+        });
+    } else {
+        roundRect(doc, MARGIN, y, CONTENT_W, 24, 4, C.panel);
+        strokeRRect(doc, MARGIN, y, CONTENT_W, 24, 4, C.border);
+        text(doc, 'No evidence recorded for this finding.', MARGIN + 12, y + 7, {
+            color: C.dim, size: 8.5,
+        });
+    }
+    y += 40;
+
+    // Timestamp footer line
+    text(doc,
+        `Detected: ${new Date(finding.timestamp).toLocaleString()}   |   Scan ID: ${scan.scanId}`,
+        MARGIN, y, { color: C.dim, size: 7.5 }
+    );
+
+    pageFooter(doc, pageNum);
+}
+
+// ── Main Entry Point ─────────────────────────────────────────────────────────
+
 function generatePdfReport(scan, res) {
     const doc = new PDFDocument({
-        size: 'LETTER',
+        size:    'LETTER',
         margins: { top: 0, bottom: 0, left: 0, right: 0 },
         bufferPages: true,
         info: {
@@ -475,7 +388,6 @@ function generatePdfReport(scan, res) {
         },
     });
 
-    // Stream directly to HTTP response
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
         'Content-Disposition',
@@ -483,14 +395,9 @@ function generatePdfReport(scan, res) {
     );
     doc.pipe(res);
 
-    // Build pages
-    buildCoverPage(doc, scan);
-    buildSummaryPage(doc, scan);
-
-    const findings = scan.findings || [];
-    findings.forEach((finding, i) => {
-        buildFindingPage(doc, finding, i + 3, scan);
-    });
+    buildCover(doc, scan);
+    buildSummary(doc, scan);
+    (scan.findings || []).forEach((f, i) => buildFinding(doc, f, i + 3, scan));
 
     doc.end();
 }
