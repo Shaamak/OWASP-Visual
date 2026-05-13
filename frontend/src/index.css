@@ -498,6 +498,34 @@ body {
   color: var(--text-muted);
 }
 
+.btn-pdf {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.45rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid rgba(63,185,80,0.4);
+  background: rgba(63,185,80,0.08);
+  color: var(--green);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+}
+
+.btn-pdf:hover:not(:disabled) {
+  background: rgba(63,185,80,0.16);
+  border-color: var(--green);
+  box-shadow: 0 0 16px rgba(63,185,80,0.2);
+}
+
+.btn-pdf:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .results-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));

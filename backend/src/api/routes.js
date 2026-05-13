@@ -2,9 +2,11 @@ const express = require('express');
 const router = express.Router();
 const { randomUUID } = require('crypto');
 const ScannerEngine = require('../scanner/engine');
+const { generatePdfReport } = require('./pdfReport');
 
 // In-memory scan store: scanId -> { status, findings, startedAt }
 const scanStore = {};
+
 
 // GET all reports
 router.get('/reports', (req, res) => {
@@ -52,4 +54,20 @@ router.post('/scan', async (req, res) => {
     res.json({ scanId, status: 'queued', targetUrl });
 });
 
+// GET PDF report for a completed scan
+router.get('/reports/:scanId/pdf', (req, res) => {
+    const scan = scanStore[req.params.scanId];
+    if (!scan) return res.status(404).json({ error: 'Scan not found' });
+    if (scan.status !== 'done') {
+        return res.status(400).json({ error: 'Scan is not complete yet. Please wait for it to finish.' });
+    }
+    try {
+        generatePdfReport(scan, res);
+    } catch (err) {
+        console.error('[PDF] Generation failed:', err);
+        res.status(500).json({ error: 'PDF generation failed' });
+    }
+});
+
 module.exports = router;
+

@@ -149,6 +149,7 @@ export default function App() {
   const [activeScanId, setActiveScanId] = useState(null);
   const [activeVideo, setActiveVideo] = useState(null);
   const [wsConnected, setWsConnected] = useState(false);
+  const [pdfLoading, setPdfLoading]   = useState(false);
 
   // WebSocket listeners
   useEffect(() => {
@@ -200,11 +201,24 @@ export default function App() {
     }
   };
 
-  // Stats
   const total     = findings.length;
   const criticals = findings.filter(f => f.severity === 'Critical').length;
   const highs     = findings.filter(f => f.severity === 'High').length;
   const recorded  = findings.filter(f => f.evidence?.videoPath).length;
+  const scanDone  = progress?.phase === 'done' && total > 0;
+
+  const handleDownloadPdf = () => {
+    if (!activeScanId) return;
+    setPdfLoading(true);
+    // Open in new tab — browser will handle the PDF download
+    const link = document.createElement('a');
+    link.href = `${BACKEND}/api/reports/${activeScanId}/pdf`;
+    link.download = `visivault-report-${activeScanId.slice(0, 8)}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => setPdfLoading(false), 2000);
+  };
 
   return (
     <div className="layout">
@@ -321,6 +335,16 @@ export default function App() {
             <div className="results-header">
               <h2>Findings</h2>
               {total > 0 && <span className="results-count">{total} vulnerabilities</span>}
+              {scanDone && (
+                <button
+                  id="download-pdf-btn"
+                  className="btn-pdf"
+                  onClick={handleDownloadPdf}
+                  disabled={pdfLoading}
+                >
+                  {pdfLoading ? '⏳ Generating...' : '📄 Export PDF'}
+                </button>
+              )}
             </div>
 
             <div className="results-grid">
