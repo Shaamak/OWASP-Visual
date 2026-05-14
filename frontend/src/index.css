@@ -822,3 +822,209 @@ body {
 ::-webkit-scrollbar-track { background: var(--bg); }
 ::-webkit-scrollbar-thumb { background: var(--bg-4); border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+
+/* ── Config Toggle Bar ────────────────────────────────────── */
+.config-toggle-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--border-2);
+}
+
+.config-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.config-toggle-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.config-toggle-btn.open {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(68, 147, 248, 0.06);
+}
+
+.config-toggle-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.config-toggle-icon {
+  font-size: 0.6rem;
+  opacity: 0.7;
+}
+
+.config-module-count {
+  margin-left: 0.25rem;
+  background: var(--bg-4);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.05rem 0.5rem;
+  font-size: 0.7rem;
+  color: var(--text-dim);
+}
+
+/* Preset buttons */
+.config-presets {
+  display: flex;
+  gap: 0.4rem;
+  margin-left: auto;
+}
+
+.preset-btn {
+  padding: 0.3rem 0.7rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-4);
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition);
+}
+
+.preset-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.preset-btn.active {
+  background: rgba(68, 147, 248, 0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.preset-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* ── Config Panel ─────────────────────────────────────────── */
+.config-panel {
+  margin-top: 1rem;
+  animation: slideUp 0.2s ease-out;
+}
+
+.config-modules-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+}
+
+/* ── Module Checkbox Cards ────────────────────────────────── */
+.module-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.7rem 0.85rem;
+  background: var(--bg);
+  border: 1px solid var(--border-2);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  position: relative;
+  overflow: hidden;
+}
+
+.module-checkbox::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 999px 0 0 999px;
+  transition: opacity var(--transition);
+  opacity: 0;
+}
+
+.module-checkbox.sev-critical::before { background: var(--sev-critical); }
+.module-checkbox.sev-high::before     { background: var(--sev-high); }
+.module-checkbox.sev-medium::before   { background: var(--sev-medium); }
+.module-checkbox.sev-low::before      { background: var(--sev-low); }
+
+.module-checkbox.checked::before      { opacity: 1; }
+.module-checkbox.checked {
+  border-color: var(--border);
+  background: var(--bg-2);
+}
+
+.module-checkbox.checked.sev-critical { border-color: var(--sev-critical-border); }
+.module-checkbox.checked.sev-high     { border-color: var(--sev-high-border); }
+.module-checkbox.checked.sev-medium   { border-color: var(--sev-medium-border); }
+
+.module-checkbox input[type="checkbox"] {
+  width: 14px; height: 14px;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.module-checkbox-body { flex: 1; min-width: 0; }
+
+.module-checkbox-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.2rem;
+}
+
+.module-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 0.7rem;
+  color: var(--purple);
+  font-weight: 500;
+}
+
+.module-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 0.15rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.module-desc {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  line-height: 1.3;
+}
+
+/* Severity tags inside module cards */
+.module-sev {
+  font-size: 0.62rem;
+  font-weight: 700;
+  padding: 0.1rem 0.4rem;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.sev-tag-critical { background: var(--sev-critical-bg); color: var(--sev-critical); border: 1px solid var(--sev-critical-border); }
+.sev-tag-high     { background: var(--sev-high-bg);     color: var(--sev-high);     border: 1px solid var(--sev-high-border); }
+.sev-tag-medium   { background: var(--sev-medium-bg);   color: var(--sev-medium);   border: 1px solid var(--sev-medium-border); }
+.sev-tag-low      { background: var(--sev-low-bg);      color: var(--sev-low);      border: 1px solid var(--sev-low-border); }
+
+/* Warning when nothing selected */
+.config-warning {
+  margin-top: 0.6rem;
+  color: var(--sev-high);
+  font-size: 0.8rem;
+  text-align: center;
+  padding: 0.4rem;
+  background: var(--sev-high-bg);
+  border: 1px solid var(--sev-high-border);
+  border-radius: var(--radius);
+}
+

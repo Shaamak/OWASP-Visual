@@ -1,10 +1,27 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 import './index.css';
 
 const BACKEND = 'http://localhost:5000';
-const socket = io(BACKEND, { autoConnect: true });
+const socket  = io(BACKEND, { autoConnect: true });
+
+// ── OWASP module metadata (mirrors backend engine) ─────────────────────────
+const OWASP_MODULES = [
+  { id: 'A01:2021', label: 'Broken Access Control',           sev: 'High',     desc: 'IDOR, path traversal, privilege escalation' },
+  { id: 'A02:2021', label: 'Cryptographic Failures',          sev: 'Critical', desc: 'Plaintext secrets, weak hashing, no HTTPS' },
+  { id: 'A03:2021', label: 'Injection (XSS / SQLi)',          sev: 'High',     desc: 'XSS, SQL injection, command injection' },
+  { id: 'A04:2021', label: 'Insecure Design',                 sev: 'High',     desc: 'OTP brute force, business logic flaws' },
+  { id: 'A05:2021', label: 'Security Misconfiguration',       sev: 'Critical', desc: 'Debug endpoints, exposed env vars' },
+  { id: 'A06:2021', label: 'Vulnerable Components',           sev: 'Critical', desc: 'Log4Shell, outdated library CVEs' },
+  { id: 'A07:2021', label: 'Auth Failures (SQLi Bypass)',     sev: 'Critical', desc: 'Authentication bypass, session issues' },
+  { id: 'A08:2021', label: 'Software Integrity Failures',     sev: 'High',     desc: 'CSRF, unsigned updates, malicious CI/CD' },
+  { id: 'A09:2021', label: 'Logging & Monitoring Failures',   sev: 'Medium',   desc: 'Brute force attacks going undetected' },
+  { id: 'A10:2021', label: 'SSRF',                            sev: 'Critical', desc: 'Server-side request forgery, metadata theft' },
+];
+
+// Quick scan preset — highest-impact 4 modules
+const QUICK_MODULES = ['A03:2021', 'A07:2021', 'A05:2021', 'A01:2021'];
 
 // ── Helper: severity → css class ─────────────────────────────
 const sevClass = (sev) => ({
@@ -141,15 +158,33 @@ function ScanProgress({ progress }) {
 
 // ── Main App ──────────────────────────────────────────────────
 export default function App() {
-  const [url, setUrl]               = useState('');
-  const [scanning, setScanning]     = useState(false);
-  const [progress, setProgress]     = useState(null);
-  const [findings, setFindings]     = useState([]);
-  const [scanHistory, setScanHistory] = useState([]);
+  const [url, setUrl]                   = useState('');
+  const [scanning, setScanning]         = useState(false);
+  const [progress, setProgress]         = useState(null);
+  const [findings, setFindings]         = useState([]);
+  const [scanHistory, setScanHistory]   = useState([]);
   const [activeScanId, setActiveScanId] = useState(null);
-  const [activeVideo, setActiveVideo] = useState(null);
-  const [wsConnected, setWsConnected] = useState(false);
-  const [pdfLoading, setPdfLoading]   = useState(false);
+  const [activeVideo, setActiveVideo]   = useState(null);
+  const [wsConnected, setWsConnected]   = useState(false);
+  const [pdfLoading, setPdfLoading]     = useState(false);
+
+  // ── Scan Config state ─────────────────────────────────────────
+  const [showConfig, setShowConfig]         = useState(false);
+  const [scanMode, setScanMode]             = useState('full'); // 'quick' | 'full'
+  const [selectedModules, setSelectedModules] = useState(
+    OWASP_MODULES.map(m => m.id)  // all selected by default
+  );
+
+  const toggleModule = (id) => {
+    setSelectedModules(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const applyPreset = (mode) => {
+    setScanMode(mode);
+    setSelectedModules(mode === 'quick' ? QUICK_MODULES : OWASP_MODULES.map(m => m.id));
+  };
 
   // WebSocket listeners
   useEffect(() => {
@@ -183,21 +218,36 @@ export default function App() {
   const handleScan = async (e) => {
     e.preventDefault();
     if (!url.trim() || scanning) return;
+    if (selectedModules.length === 0) {
+      alert('Please select at least one OWASP module to scan.');
+      return;
+    }
 
     setScanning(true);
     setFindings([]);
     setProgress({ phase: 'crawling', message: 'Initiating scan...', progress: 0 });
+    setShowConfig(false); // collapse config panel during scan
 
     try {
-      const { data } = await axios.post(`${BACKEND}/api/scan`, { targetUrl: url });
+      const { data } = await axios.post(`${BACKEND}/api/scan`, {
+        targetUrl: url,
+        selectedModules,
+      });
       setActiveScanId(data.scanId);
       setScanHistory((prev) => [
-        { scanId: data.scanId, url: url, startedAt: new Date().toISOString(), status: 'scanning', findings: 0 },
+        {
+          scanId: data.scanId,
+          url,
+          startedAt: new Date().toISOString(),
+          status: 'scanning',
+          findings: 0,
+          modules: selectedModules.length,
+        },
         ...prev,
       ]);
     } catch {
       setScanning(false);
-      setProgress({ phase: 'done', message: '⚠️ Could not connect to scanner engine.', progress: 0 });
+      setProgress({ phase: 'done', message: 'Could not connect to scanner engine.', progress: 0 });
     }
   };
 
@@ -293,13 +343,13 @@ export default function App() {
           {/* Scanner */}
           <div className="scanner-card">
             <div className="scanner-card-header">
-              <h2>🎯 Launch Scan</h2>
+              <h2>Launch Scan</h2>
               <p>Enter a target URL. The engine will crawl, inject payloads, and record visual proof of each vulnerability found.</p>
             </div>
 
             <form className="scan-form" onSubmit={handleScan}>
               <div className="url-input-wrap">
-                <span className="input-icon">🔗</span>
+                <span className="input-icon">&#x1F517;</span>
                 <input
                   id="target-url"
                   className="url-input"
@@ -311,17 +361,83 @@ export default function App() {
                   required
                 />
               </div>
-              <button id="start-scan-btn" className="btn-scan" type="submit" disabled={scanning}>
-                {scanning ? <span className="spin">⟳</span> : '▶'}
+              <button id="start-scan-btn" className="btn-scan" type="submit" disabled={scanning || selectedModules.length === 0}>
+                {scanning ? <span className="spin">&#x27F3;</span> : '&#9654;'}
                 {scanning ? 'Scanning...' : 'Start Scan'}
               </button>
             </form>
 
-            <div className="scan-options">
-              {['A01 Broken Access Control', 'A03 Injection (XSS/SQLi)', 'A07 Auth Failures', 'A05 Security Misconfig'].map(tag => (
-                <div key={tag} className="scan-tag">✓ {tag}</div>
-              ))}
+            {/* Config Toggle Bar */}
+            <div className="config-toggle-bar">
+              <button
+                className={`config-toggle-btn ${showConfig ? 'open' : ''}`}
+                onClick={() => setShowConfig(v => !v)}
+                type="button"
+                disabled={scanning}
+              >
+                <span className="config-toggle-icon">{showConfig ? '\u25B2' : '\u25BC'}</span>
+                Configure Modules
+                <span className="config-module-count">
+                  {selectedModules.length}/{OWASP_MODULES.length} selected
+                </span>
+              </button>
+
+              <div className="config-presets">
+                <button
+                  className={`preset-btn ${scanMode === 'quick' ? 'active' : ''}`}
+                  onClick={() => applyPreset('quick')}
+                  type="button"
+                  disabled={scanning}
+                  title="Runs the 4 most critical OWASP modules only"
+                >
+                  Quick (4)
+                </button>
+                <button
+                  className={`preset-btn ${scanMode === 'full' ? 'active' : ''}`}
+                  onClick={() => applyPreset('full')}
+                  type="button"
+                  disabled={scanning}
+                  title="Runs all 10 OWASP Top 10 modules"
+                >
+                  Full (10)
+                </button>
+              </div>
             </div>
+
+            {/* Collapsible Module Checkboxes */}
+            {showConfig && (
+              <div className="config-panel">
+                <div className="config-modules-grid">
+                  {OWASP_MODULES.map((mod) => {
+                    const checked = selectedModules.includes(mod.id);
+                    return (
+                      <label
+                        key={mod.id}
+                        className={`module-checkbox ${checked ? 'checked' : ''} sev-${mod.sev.toLowerCase()}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => { toggleModule(mod.id); setScanMode('custom'); }}
+                          disabled={scanning}
+                        />
+                        <div className="module-checkbox-body">
+                          <div className="module-checkbox-top">
+                            <span className="module-id">{mod.id}</span>
+                            <span className={`module-sev sev-tag-${mod.sev.toLowerCase()}`}>{mod.sev}</span>
+                          </div>
+                          <div className="module-label">{mod.label}</div>
+                          <div className="module-desc">{mod.desc}</div>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+                {selectedModules.length === 0 && (
+                  <p className="config-warning">Select at least one module to start a scan.</p>
+                )}
+              </div>
+            )}
 
             {(scanning || progress?.phase === 'done') && (
               <div style={{ marginTop: '1.25rem' }}>

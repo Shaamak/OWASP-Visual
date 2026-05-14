@@ -138,7 +138,7 @@ const VULN_MODULES = [
 
 // ── Engine ────────────────────────────────────────────────────────────────
 class ScannerEngine {
-    async runScan({ scanId, targetUrl, io, scanStore }) {
+    async runScan({ scanId, targetUrl, io, scanStore, selectedModules }) {
         const emit = (event, data) => io.emit(event, { scanId, ...data });
         const scan = scanStore[scanId];
 
@@ -160,9 +160,15 @@ class ScannerEngine {
         await delay(600);
 
         // ── Phase 2–4: Run each OWASP module ──────────────────────────
-        for (let i = 0; i < VULN_MODULES.length; i++) {
-            const mod = VULN_MODULES[i];
-            const progressBase = 12 + Math.round((i / VULN_MODULES.length) * 75);
+        // Filter to only selected modules (default: all)
+        const activeModules = (selectedModules && selectedModules.length > 0)
+            ? VULN_MODULES.filter(m => selectedModules.includes(m.owaspId))
+            : VULN_MODULES;
+
+        const totalModules = activeModules.length;
+        for (let i = 0; i < activeModules.length; i++) {
+            const mod = activeModules[i];
+            const progressBase = 12 + Math.round((i / totalModules) * 75);
 
             // Scanning phase
             scan.status = 'scanning';
@@ -171,13 +177,13 @@ class ScannerEngine {
                 message: `[${mod.owaspId}] ${mod.phase} — injecting payloads...`,
                 progress: progressBase,
             });
-            console.log(`[Engine:${scanId}] Module ${i + 1}/10: ${mod.name}`);
+            console.log(`[Engine:${scanId}] Module ${i + 1}/${totalModules}: ${mod.name}`);
             await delay(mod.delayMs);
 
             // Simulation phase
             emit('scan:progress', {
                 phase: 'simulating',
-                message: `🎬 [${mod.owaspId}] Confirmed! Recording visual proof for: ${mod.name}`,
+                message: `[${mod.owaspId}] Vulnerability confirmed. Recording visual proof...`,
                 progress: progressBase + 5,
             });
 
@@ -208,12 +214,12 @@ class ScannerEngine {
         const criticalCount = scan.findings.filter(f => f.severity === 'Critical').length;
         emit('scan:progress', {
             phase: 'done',
-            message: `✅ Scan complete — ${scan.findings.length} vulnerabilities found (${criticalCount} Critical). All exploits recorded.`,
+            message: `Scan complete — ${scan.findings.length} vulnerabilities found (${criticalCount} Critical). All exploits recorded.`,
             progress: 100,
         });
         emit('scan:complete', { scan });
 
-        console.log(`[Engine:${scanId}] ✅ Done — ${scan.findings.length} findings.`);
+        console.log(`[Engine:${scanId}] Done — ${scan.findings.length} findings.`);
         return scan;
     }
 }

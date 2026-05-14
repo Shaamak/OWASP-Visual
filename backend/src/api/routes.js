@@ -23,7 +23,7 @@ router.get('/reports/:scanId', (req, res) => {
 
 // POST - initiate a new scan
 router.post('/scan', async (req, res) => {
-    const { targetUrl } = req.body;
+    const { targetUrl, selectedModules } = req.body;
 
     if (!targetUrl) {
         return res.status(400).json({ error: 'targetUrl is required' });
@@ -36,6 +36,7 @@ router.post('/scan', async (req, res) => {
     scanStore[scanId] = {
         scanId,
         targetUrl,
+        selectedModules: selectedModules || [],
         status: 'queued',
         findings: [],
         startedAt: new Date().toISOString(),
@@ -45,7 +46,7 @@ router.post('/scan', async (req, res) => {
     console.log(`[API] Scan queued: ${scanId} → ${targetUrl}`);
 
     // Fire and forget: run in background, emit progress over WS
-    ScannerEngine.runScan({ scanId, targetUrl, io, scanStore }).catch((err) => {
+    ScannerEngine.runScan({ scanId, targetUrl, io, scanStore, selectedModules }).catch((err) => {
         console.error(`[Engine] Unhandled error for scan ${scanId}:`, err);
         scanStore[scanId].status = 'error';
         io.emit('scan:error', { scanId, message: err.message });
