@@ -362,7 +362,7 @@ export default function App() {
                 />
               </div>
               <button id="start-scan-btn" className="btn-scan" type="submit" disabled={scanning || selectedModules.length === 0}>
-                {scanning ? <span className="spin">&#x27F3;</span> : '&#9654;'}
+                {scanning ? <span className="spin">⟳</span> : '▶ '}
                 {scanning ? 'Scanning...' : 'Start Scan'}
               </button>
             </form>
