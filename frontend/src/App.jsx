@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { io } from 'socket.io-client';
+import EvidenceLibrary from './EvidenceLibrary';
 import './index.css';
 
 const BACKEND = 'http://localhost:5000';
@@ -167,6 +168,7 @@ export default function App() {
   const [activeVideo, setActiveVideo]   = useState(null);
   const [wsConnected, setWsConnected]   = useState(false);
   const [pdfLoading, setPdfLoading]     = useState(false);
+  const [activePage, setActivePage]     = useState('dashboard'); // 'dashboard' | 'library'
 
   // ── Scan Config state ─────────────────────────────────────────
   const [showConfig, setShowConfig]         = useState(false);
@@ -286,18 +288,21 @@ export default function App() {
 
         <nav className="sidebar-nav">
           <div className="nav-section-label">Navigation</div>
-          <div className="nav-item active">
-            <span className="nav-icon">🏠</span> Dashboard
+          <div
+            className={`nav-item ${activePage === 'dashboard' ? 'active' : ''}`}
+            onClick={() => setActivePage('dashboard')}
+          >
+            <span className="nav-icon">&#x1F3E0;</span> Dashboard
           </div>
-          <div className="nav-item">
-            <span className="nav-icon">📹</span> Evidence Library
+          <div
+            className={`nav-item ${activePage === 'library' ? 'active' : ''}`}
+            onClick={() => setActivePage('library')}
+          >
+            <span className="nav-icon">&#x1F4F9;</span> Evidence Library
             {recorded > 0 && <span className="nav-badge">{recorded}</span>}
           </div>
           <div className="nav-item">
-            <span className="nav-icon">📋</span> Reports
-          </div>
-          <div className="nav-item">
-            <span className="nav-icon">⚙️</span> Settings
+            <span className="nav-icon">&#x2699;&#xFE0F;</span> Settings
           </div>
         </nav>
 
@@ -322,7 +327,9 @@ export default function App() {
       {/* ── Main ── */}
       <div className="main-content">
         <header className="topbar">
-          <span className="topbar-title">Vulnerability Scanner</span>
+          <span className="topbar-title">
+            {activePage === 'dashboard' ? 'Vulnerability Scanner' : 'Evidence Library'}
+          </span>
           <div className="topbar-right">
             <div className={`status-pill ${wsConnected ? 'live' : ''}`}>
               <span className="pulse" />
@@ -332,6 +339,9 @@ export default function App() {
         </header>
 
         <main className="page">
+          {activePage === 'library' ? (
+            <EvidenceLibrary onPlay={setActiveVideo} />
+          ) : (<>
           {/* Stats */}
           <div className="stats-row">
             <StatCard icon="🔍" label="Total Findings"    value={total}     color="blue"   />
@@ -477,6 +487,7 @@ export default function App() {
               )}
             </div>
           </div>
+          </>)}
         </main>
       </div>
 
